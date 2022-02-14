@@ -706,7 +706,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "35002"))
     username = os.getenv("USERNAME", None)
     password = os.getenv("PASSWORD", None)
-    r = CrissCrossClient(host=host, port=port, username=username, password=password)
+    r = CrissCross(host=host, port=port, username=username, password=password)
 
     if args.command == "upload_dir":
         ret = r.upload_dir(read_var(args.tree), args.dir)

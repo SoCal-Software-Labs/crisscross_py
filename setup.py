@@ -6,24 +6,13 @@ try:
 except ImportError:
     from distutils.core import setup, Command
 
-class PyTest(Command):
-    user_options = []
-    def initialize_options(self):
-        pass
-    def finalize_options(self):
-        pass
-    def run(self):
-        import tests.elixir_tests
-        import unittest
-        suite = unittest.TestSuite()
-        suite.addTests(tests.elixir_tests.get_suite())
-        unittest.TextTestRunner().run(suite)
 
-long_description = open('README.markdown', 'r').read()
+long_description = open('README.md', 'r').read()
 setup(
+    install_requires=["elixir_py", "redis"],
     name='crisscross_py',
     py_modules=['crisscross'],
-    cmdclass={'test': PyTest},
+    scripts=['./scripts/crisscross'],
     license='MIT',
     classifiers=[
         'Development Status :: 5 - Production/Stable',
@@ -42,5 +31,5 @@ setup(
     long_description_content_type='text/markdown',
     author='Kyle Hanson',
     author_email='kyle@statetrace.com',
-    url='https://github.com/SoCal-Software-Labs/crisscross_pyS',
+    url='https://github.com/SoCal-Software-Labs/crisscross_py',
 )
