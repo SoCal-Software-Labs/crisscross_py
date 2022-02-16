@@ -9,13 +9,13 @@ except ImportError:
 
 long_description = open('README.md', 'r').read()
 setup(
-    install_requires=["elixir_py", "redis"],
+    install_requires=["elixir_py", "redis", "base58"],
     name='crisscross_py',
     py_modules=['crisscross'],
     scripts=['./scripts/crisscross'],
     license='MIT',
     classifiers=[
-        'Development Status :: 5 - Production/Stable',
+        'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
@@ -25,7 +25,7 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
         'Topic :: System :: Distributed Computing',
     ],
-    version='1.0.0',
+    version='1.0.1',
     description='Python Client for CrissCross Network',
     long_description=long_description,
     long_description_content_type='text/markdown',

@@ -22,7 +22,7 @@ def read_var(t):
     if not t:
         return ""
     if t == "*defaultcluster":
-        return base58.b58decode("8ZEftKHKUhq1hfxvx7HPxjZKffDhPku12Ck1nhczysxQ")
+        return base58.b58decode("2UPhq1AXgmhSd6etUcSQRPfm42mSREcjUixSgi9N8nU1YoC")
     elif t.startswith("*"):
         parts = t.split("#")
         base = parts[0].lstrip("*")
@@ -68,7 +68,10 @@ class CrissCross:
         return self.conn.execute_command("VARSET", var, val)
 
     def var_get(self, var):
-        return self.conn.execute_command("VARGET", var, val)
+        return self.conn.execute_command("VARGET", var)
+
+    def var_delete(self, var):
+        return self.conn.execute_command("VARDELETE", var)
 
     def var_with(self, var, *args):
         return self.conn.execute_command("VARWITH", var, *args)
@@ -91,20 +94,20 @@ class CrissCross:
             "WITHVAR", var, s, cluster, num, "BYTESWRITTEN"
         )
 
-    def put_multi(self, loc, kvs):
+    def put_multi(self, loc, kvs, ttl=DEFAULT_TTL):
         flat_ls = [encode(item) for tup in kvs for item in tup]
-        return self.conn.execute_command("PUTMULTI", loc, *flat_ls)
+        return self.conn.execute_command("PUTMULTI", loc, str(ttl), *flat_ls)
 
-    def put_multi_bin(self, loc, kvs):
+    def put_multi_bin(self, loc, kvs, ttl=DEFAULT_TTL):
         flat_ls = [item for tup in kvs for item in tup]
-        return self.conn.execute_command("PUTMULTIBIN", loc, *flat_ls)
+        return self.conn.execute_command("PUTMULTIBIN", loc, str(ttl), *flat_ls)
 
-    def delete_multi(self, loc, keys):
+    def delete_multi(self, loc, keys, ttl=DEFAULT_TTL):
         keys = [encode(item) for item in keys]
-        return self.conn.execute_command("DELMULTI", loc, *keys)
+        return self.conn.execute_command("DELMULTI", loc, str(ttl), *keys)
 
-    def delete_multi_bin(self, loc, keys):
-        return self.conn.execute_command("DELMULTIBIN", loc, *keys)
+    def delete_multi_bin(self, loc, keys, ttl=DEFAULT_TTL):
+        return self.conn.execute_command("DELMULTIBIN", loc, str(ttl), *keys)
 
     def get_multi(self, loc, keys):
         keys = [encode(item) for item in keys]
@@ -131,8 +134,12 @@ class CrissCross:
     def has_key_bin(self, loc, key):
         return self.conn.execute_command("HASKEYBIN", loc, key) == 1
 
-    def sql(self, loc, *statements):
-        r = self.conn.execute_command("SQL", loc, *statements)
+    def sql(self, loc, *statements, ttl=DEFAULT_TTL):
+        r = self.conn.execute_command("SQL", loc, str(ttl), *statements)
+        return r[0], [decode(s) for s in r[1:]]
+
+    def sql_read(self, loc, *statements):
+        r = self.conn.execute_command("SQLREAD", loc, *statements)
         return r[0], [decode(s) for s in r[1:]]
 
     def remote_get_multi(self, cluster, loc, keys, num=1, cache=True):
@@ -166,25 +173,30 @@ class CrissCross:
         s = "REMOTE" if cache else "REMOTENOLOCAL"
         return self.conn.execute_command(s, cluster, num, "HASKEYBIN", loc, key) == 1
 
-    def remote_sql(self, cluster, loc, *statements, num=1, cache=True):
+    def remote_sql(self, cluster, loc, *statements, num=1, cache=True, ttl=DEFAULT_TTL):
         s = "REMOTE" if cache else "REMOTENOLOCAL"
-        r = self.conn.execute_command(s, cluster, num, "SQL", loc, *statements)
+        r = self.conn.execute_command(s, cluster, num, "SQL", loc, str(ttl), *statements)
         return r[0], [decode(s) for s in r[1:]]
 
-    def with_var_put_multi(self, var, kvs):
+    def remote_sql_read(self, cluster, loc, *statements, num=1, cache=True):
+        s = "REMOTE" if cache else "REMOTENOLOCAL"
+        r = self.conn.execute_command(s, cluster, num, "SQLREAD", loc, *statements)
+        return r[0], [decode(s) for s in r[1:]]
+
+    def with_var_put_multi(self, var, kvs, ttl=DEFAULT_TTL):
         flat_ls = [encode(item) for tup in kvs for item in tup]
-        return self.conn.execute_command("VARWITH", var, "PUTMULTI", *flat_ls)
+        return self.conn.execute_command("VARWITH", var, "PUTMULTI", str(ttl), *flat_ls)
 
-    def with_var_put_multi_bin(self, var, kvs):
+    def with_var_put_multi_bin(self, var, kvs, ttl=DEFAULT_TTL):
         flat_ls = [item for tup in kvs for item in tup]
-        return self.conn.execute_command("VARWITH", var, "PUTMULTIBIN", *flat_ls)
+        return self.conn.execute_command("VARWITH", var, "PUTMULTIBIN", str(ttl), *flat_ls)
 
-    def with_var_delete_multi(self, loc, keys):
+    def with_var_delete_multi(self, loc, keys, ttl=DEFAULT_TTL):
         keys = [encode(item) for item in keys]
-        return self.conn.execute_command("VARWITH", var, "DELMULTI", *keys)
+        return self.conn.execute_command("VARWITH", var, "DELMULTI", str(ttl), *keys)
 
-    def with_var_delete_multi_bin(self, var, keys):
-        return self.conn.execute_command("VARWITH", var, "DELMULTIBIN", *keys)
+    def with_var_delete_multi_bin(self, var, keys, ttl=DEFAULT_TTL):
+        return self.conn.execute_command("VARWITH", var, "DELMULTIBIN", str(ttl), *keys)
 
     def with_var_get_multi(self, var, keys):
         keys = [encode(item) for item in keys]
@@ -211,9 +223,13 @@ class CrissCross:
     def with_var_has_key_bin(self, var, key):
         return self.conn.execute_command("VARWITH", var, "HASKEYBIN", key) == 1
 
-    def with_var_sql(self, var, *statements):
-        r = self.conn.execute_command("VARWITH", var, "SQL", *statements)
+    def with_var_sql(self, var, *statements, ttl=DEFAULT_TTL):
+        r = self.conn.execute_command("VARWITH", var, "SQL", str(ttl), *statements)
         return r[0], [decode(s) for s in r[1:]]
+
+    def with_var_sql_read(self, var, *statements):
+        r = self.conn.execute_command("VARWITH", var, "SQLREAD", *statements)
+        return [decode(s) for s in r]
 
     def with_var_remote_get_multi(self, var, cluster, keys, num=1, cache=True):
         keys = [encode(item) for item in keys]
@@ -258,10 +274,17 @@ class CrissCross:
             == 1
         )
 
-    def with_var_remote_sql(self, var, cluster, *statements, num=1, cache=True):
+    def with_var_remote_sql(self, var, cluster, *statements, num=1, cache=True, ttl=DEFAULT_TTL):
         s = "REMOTE" if cache else "REMOTENOLOCAL"
         r = self.conn.execute_command(
-            "VARWITH", var, s, cluster, num, "SQL", *statements
+            "VARWITH", var, s, cluster, num, "SQL", str(ttl) *statements
+        )
+        return r[0], [decode(s) for s in r[1:]]
+
+    def with_var_remote_sql_read(self, var, cluster, *statements, num=1, cache=True):
+        s = "REMOTE" if cache else "REMOTENOLOCAL"
+        r = self.conn.execute_command(
+            "VARWITH", var, s, cluster, num, "SQLREAD", *statements
         )
         return r[0], [decode(s) for s in r[1:]]
 
@@ -546,10 +569,16 @@ class CrissCross:
         with open(real_fn, "wb") as f:
             self._do_download(f, it)
     
-    def remote_clone(self, cluster, loc, num=1, cache=True):
+    def remote_persist(self, cluster, loc, ttl=-1, num=1, cache=True):
         s = "REMOTE" if cache else "REMOTENOLOCAL"
         return (
-            self.conn.execute_command(s, cluster, str(num), "CLONE", loc)
+            self.conn.execute_command(s, cluster, str(num), "PERSIST", loc, str(ttl))
+            == b"OK"
+        )
+
+    def persist(self, loc, ttl=-1):
+        return (
+            self.conn.execute_command("PERSIST", loc, str(ttl))
             == b"OK"
         )
 
@@ -614,7 +643,10 @@ if __name__ == "__main__":
     subparser = subparsers.add_parser("var_get")
     subparser.add_argument("cluster")
     subparser.add_argument("key")
-
+    
+    subparser = subparsers.add_parser("var_delete")
+    subparser.add_argument("cluster")
+    subparser.add_argument("key")
 
     subparser = subparsers.add_parser("put")
     subparser.add_argument("tree")
@@ -695,18 +727,27 @@ if __name__ == "__main__":
     subparser.add_argument("--num", type=int, default=1)
     subparser.add_argument("--cache", type=bool, default=True)
 
-    subparser = subparsers.add_parser("remote_clone")
+    subparser = subparsers.add_parser("persist")
+    subparser.add_argument("tree")
+    subparser.add_argument("--ttl", type=int, default=-1)
+
+    subparser = subparsers.add_parser("remote_persist")
     subparser.add_argument("cluster")
     subparser.add_argument("tree")
     subparser.add_argument("--num", type=int, default=1)
     subparser.add_argument("--cache", type=bool, default=True)
+    subparser.add_argument("--ttl", type=int, default=-1)
 
     args = parser.parse_args()
     host = os.getenv("HOST", "localhost")
     port = int(os.getenv("PORT", "35002"))
-    username = os.getenv("USERNAME", None)
-    password = os.getenv("PASSWORD", None)
-    r = CrissCross(host=host, port=port, username=username, password=password)
+    username = os.getenv("CRISSCROSS_USERNAME", None)
+    password = os.getenv("CRISSCROSS_PASSWORD", None)
+    if username is not None:
+        kwargs = dict(username=username, password=password)
+    else:
+        kwargs = {}
+    r = CrissCross(host=host, port=port, **kwargs)
 
     if args.command == "upload_dir":
         ret = r.upload_dir(read_var(args.tree), args.dir)
@@ -743,11 +784,13 @@ if __name__ == "__main__":
         )
         print_ret(ret)
     elif args.command == "var_set":
-        ret = r.var_set(read_var(args.cluster), args.key, read_var(args.value))
+        ret = r.var_set(args.key, read_var(args.value))
         print_ret(ret)
     elif args.command == "var_get":
-        ret = r.var_get(read_var(args.cluster), read_var(args.key))
+        ret = r.var_get(read_var(args.key))
         print_ret(ret)
+    elif args.command == "var_delete":
+        ret = r.var_delete(read_var(args.key))
     elif args.command == "put":
         ret = r.put_multi_bin(read_var(args.tree), [(args.key, args.value)])
         print_ret(ret)
@@ -845,11 +888,20 @@ if __name__ == "__main__":
                 ttl=args.ttl,
             )
         )
-    elif args.command == "remote_clone":
+    elif args.command == "persist":
         print_get(
-            r.remote_clone(
+            r.persist(
+                read_var(args.tree),
+                ttl=args.ttl
+            )
+        )
+
+    elif args.command == "remote_persist":
+        print_get(
+            r.remote_persist(
                 read_var(args.cluster),
                 read_var(args.tree),
+                ttl=args.ttl,
                 num=args.num,
                 cache=args.cache,
             )
