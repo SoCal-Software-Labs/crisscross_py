@@ -120,3 +120,25 @@ Execute many statements at once:
 >>> print(sqlreturns)
 [(Atom(b'ok'), b'Create'), (Atom(b'ok'), {b'Insert': 1}), (Atom(b'ok'), {b'Insert': 1}), (Atom(b'ok'), {b'Select': {b'labels': [b'id'], b'rows': [[{b'I64': 200}]]}})]
 ```
+
+
+## Jobs
+
+Build a job server.
+
+#### Server
+
+```python
+tree, public, priv = client.keypair()
+client.job_announce(read_var("*defaultcluster"), tree)
+[method, arg, ref] = r.job_get(tree)
+arg = arg + 1
+client.job_respond(ref, arg, tree)
+```
+
+#### Client
+```python
+resp = client.remote_job_do(read_var("*defaultcluster"), tree, "method", 42)
+print(resp)
+print(client.job_verify(tree, "method", 42, resp[0], resp[1], public))
+```
