@@ -7,9 +7,9 @@ cluster = read_var("*defaultcluster")
 if os.getenv("READ"):
     writer = CrissCross(host=host, port=port, **kwargs)
 
-    writer.tunnel_close(7777) # Close any previously opened ports
+    writer.tunnel_close(7777)  # Close any previously opened ports
     writer.tunnel_open(cluster, name, 7777, "www.httpbin.org", 80)
-    
+
 else:
     writer = CrissCross(host=host, port=port, **kwargs)
     writer.job_announce(cluster, name)

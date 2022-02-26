@@ -1,3 +1,6 @@
+import os
+from crisscross import read_var, CrissCross
+
 
 tree = read_var("*./keys/my_var.yaml#Name")
 cluster = read_var("*defaultcluster")

@@ -25,7 +25,7 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
         "Topic :: System :: Distributed Computing",
     ],
-    version="1.0.1",
+    version="1.0.2",
     description="Python Client for CrissCross Network",
     long_description=long_description,
     long_description_content_type="text/markdown",

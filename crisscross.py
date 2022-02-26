@@ -110,7 +110,9 @@ class CrissCross:
         return ret == b"OK"
 
     def tunnel_allow(self, token, cluster, private_key, host, port):
-        ret = self.conn.execute_command("TUNNELALLOW", token, cluster, private_key, host, str(port))
+        ret = self.conn.execute_command(
+            "TUNNELALLOW", token, cluster, private_key, host, str(port)
+        )
         return ret == b"OK"
 
     def tunnel_disallow(self, cluster, host, port):
@@ -1051,4 +1053,3 @@ if __name__ == "__main__":
                 cache=args.cache,
             )
         )
-
