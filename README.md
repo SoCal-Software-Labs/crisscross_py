@@ -131,9 +131,10 @@ Build a job server.
 ```python
 tree, public, priv = client.keypair()
 client.job_announce(read_var("*defaultcluster"), tree)
-[method, arg, ref] = r.job_get(tree)
-arg = arg + 1
-client.job_respond(ref, arg, tree)
+while True:
+    method, arg, ref = r.job_get(tree)
+    arg = arg + 1
+    client.job_respond(ref, arg, tree)
 ```
 
 #### Client

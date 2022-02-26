@@ -9,7 +9,8 @@ import base58
 import yaml
 
 DEFAULT_TTL = 1000 * 60 * 60 * 24
-DEFAULT_TIMEOUT = 1000 * 30
+DEFAULT_TIMEOUT = 1000 * 10
+
 
 def decode(raw):
     return elixir.binary_to_term(raw)
@@ -24,7 +25,7 @@ def read_var(t):
         return ""
     if t == "*defaultcluster":
         return base58.b58decode("2UPhq1AXgmhSd6etUcSQRPfm42mSREcjUixSgi9N8nU1YoC")
-    elif t.startswith("*"):
+    elif t.startswith("*") and "#" in t:
         parts = t.split("#")
         base = parts[0].lstrip("*")
         with open(f"{base}", "r") as file:
@@ -44,9 +45,51 @@ def print_ret(ret):
         print(base58.b58encode(ret).decode("utf8"))
 
 
+class CrissCrossJobSub:
+    def __init__(self, pubsub_conn):
+        self.conn = pubsub_conn
+
+    def subscribe_to_job(self, tree):
+        self.conn.subscribe(tree)
+
+    def listen(self):
+        for ret in self.conn.listen():
+            if ret["type"] == "message":
+                tree = ret["channel"]
+                data = decode(ret["data"])
+                if len(data) == 3:
+                    yield (tree, data[0], decode(data[1]), data[2])
+                else:
+                    raise Exception(data[0])
+
+
+class CrissCrossStreamSub:
+    def __init__(self, pubsub_conn):
+        self.conn = pubsub_conn
+
+    def subsribe_to_stream(self, stream_reference):
+        self.conn.psubscribe(stream_reference)
+
+    def listen(self):
+        for ret in self.conn.listen():
+            if ret["type"] == "pmessage":
+                stream = ret["pattern"]
+                data = decode(ret["data"])
+                if len(data) == 2:
+                    yield (stream, decode(data[0]), data[1])
+                else:
+                    raise Exception(data[0])
+
+
 class CrissCross:
     def __init__(self, host="localhost", port=11111, **kwargs):
         self.conn = redis.Redis(host=host, port=port, **kwargs)
+
+    def pubsub_streams(self):
+        return CrissCrossStreamSub(self.conn.pubsub())
+
+    def pubsub_jobs(self):
+        return CrissCrossJobSub(self.conn.pubsub())
 
     def keypair(self):
         ret = self.conn.execute_command("KEYPAIR")
@@ -56,24 +99,70 @@ class CrissCross:
         ret = self.conn.execute_command("CLUSTER")
         return ret[0], ret[1], ret[2], ret[3]
 
+    def tunnel_open(self, cluster, name, local_port, host, port):
+        ret = self.conn.execute_command(
+            "TUNNELOPEN", cluster, name, str(local_port), host, str(port)
+        )
+        return ret == b"OK"
+
+    def tunnel_close(self, local_port):
+        ret = self.conn.execute_command("TUNNELCLOSE", str(local_port))
+        return ret == b"OK"
+
+    def tunnel_allow(self, token, cluster, private_key, host, port):
+        ret = self.conn.execute_command("TUNNELALLOW", token, cluster, private_key, host, str(port))
+        return ret == b"OK"
+
+    def tunnel_disallow(self, cluster, host, port):
+        ret = self.conn.execute_command("TUNNELDISALLOW", cluster, host, str(port))
+        return ret == b"OK"
+
+    def stream_start(self, tree):
+        ref = self.conn.execute_command("STREAMSTART", tree)
+        return ref
+
+    def remote_stream_start(self, cluster, tree):
+        ref = self.conn.execute_command("REMOTE", cluster, "1", "STREAMSTART", tree)
+        return ref
+
+    def stream_send(self, stream_ref, msg, argument, timeout=DEFAULT_TIMEOUT):
+        ret = self.conn.execute_command(
+            "STREAMSEND", stream_ref, msg, encode(argument), str(timeout)
+        )
+        return ret == b"OK"
 
     def job_get(self, tree, timeout=DEFAULT_TIMEOUT):
         [method, arg, ref] = self.conn.execute_command("JOBGET", tree, str(timeout))
-        return method, decode(arg), decode(ref)
-    
-    def job_announce(self, cluster, tree, timeout=DEFAULT_TIMEOUT):
-        return self.conn.execute_command("JOBANNOUNCE", cluster, tree, str(timeout)) == b"OK"
+        return method, decode(arg), ref
+
+    def job_announce(self, cluster, tree, ttl=DEFAULT_TTL):
+        return (
+            self.conn.execute_command("JOBANNOUNCE", cluster, tree, str(ttl)) == b"OK"
+        )
 
     def job_do(self, tree, method, argument, timeout=DEFAULT_TIMEOUT):
-        rets = self.conn.execute_command("JOBDO", tree,  str(timeout), method, encode(argument))
+        rets = self.conn.execute_command(
+            "JOBDO", tree, str(timeout), method, encode(argument)
+        )
         ret = rets[0]
         if len(ret) == 2:
             return (decode(ret[0]), ret[1])
         else:
             raise Exception(ret[0])
-    
-    def remote_job_do(self, cluster, tree, method, argument, num=1, timeout=DEFAULT_TIMEOUT):
-        rets = self.conn.execute_command("REMOTE", cluster, str(num), "JOBDO", tree, str(timeout), method, encode(argument))
+
+    def remote_job_do(
+        self, cluster, tree, method, argument, num=1, timeout=DEFAULT_TIMEOUT
+    ):
+        rets = self.conn.execute_command(
+            "REMOTE",
+            cluster,
+            str(num),
+            "JOBDO",
+            tree,
+            str(timeout),
+            method,
+            encode(argument),
+        )
         ret = rets[0]
         if len(ret) == 2:
             return (decode(ret[0]), ret[1])
@@ -81,14 +170,31 @@ class CrissCross:
             print(ret)
             raise RedisError(ret)
 
+    def job_local(self, name, ttl=DEFAULT_TIMEOUT):
+        return self.conn.execute_command("JOBLOCAL", name, str(ttl)) == b"OK"
+
     def job_respond(self, ref, response, private_key, timeout=DEFAULT_TIMEOUT):
-        return self.conn.execute_command("JOBRESPOND", encode(ref), encode(response), private_key) == b'OK'
+        return (
+            self.conn.execute_command("JOBRESPOND", ref, encode(response), private_key)
+            == b"OK"
+        )
 
     def job_verify(self, tree, method, argument, response, signature, public_key):
-        return self.conn.execute_command("JOBVERIFY", tree, method, encode(argument), encode(response), signature, public_key) == 1
+        return (
+            self.conn.execute_command(
+                "JOBVERIFY",
+                tree,
+                method,
+                encode(argument),
+                encode(response),
+                signature,
+                public_key,
+            )
+            == 1
+        )
 
     def push(self, cluster, value, ttl=DEFAULT_TTL):
-        return self.conn.execute_command("PUSH", cluster, value, str(ttl)) == b'OK'
+        return self.conn.execute_command("PUSH", cluster, value, str(ttl)) == b"OK"
 
     def remote(self, cluster, num_conns, *args):
         return self.conn.execute_command("REMOTE", cluster, num_conns, *args)
@@ -109,7 +215,9 @@ class CrissCross:
         return self.conn.execute_command("VARWITH", var, *args)
 
     def compact(self, tree, ttl=DEFAULT_TTL):
-        [new_tree, new_size, old_size] = self.conn.execute_command("COMPACT", tree, str(ttl))
+        [new_tree, new_size, old_size] = self.conn.execute_command(
+            "COMPACT", tree, str(ttl)
+        )
         return new_tree, new_size, old_size
 
     def bytes_written(self, tree):
@@ -211,7 +319,9 @@ class CrissCross:
 
     def remote_sql(self, cluster, loc, *statements, num=1, cache=True, ttl=DEFAULT_TTL):
         s = "REMOTE" if cache else "REMOTENOLOCAL"
-        r = self.conn.execute_command(s, cluster, num, "SQL", loc, str(ttl), *statements)
+        r = self.conn.execute_command(
+            s, cluster, num, "SQL", loc, str(ttl), *statements
+        )
         return r[0], [decode(s) for s in r[1:]]
 
     def remote_sql_read(self, cluster, loc, *statements, num=1, cache=True):
@@ -225,7 +335,9 @@ class CrissCross:
 
     def var_with_put_multi_bin(self, var, kvs, ttl=DEFAULT_TTL):
         flat_ls = [item for tup in kvs for item in tup]
-        return self.conn.execute_command("VARWITH", var, "PUTMULTIBIN", str(ttl), *flat_ls)
+        return self.conn.execute_command(
+            "VARWITH", var, "PUTMULTIBIN", str(ttl), *flat_ls
+        )
 
     def var_with_delete_multi(self, loc, keys, ttl=DEFAULT_TTL):
         keys = [encode(item) for item in keys]
@@ -310,10 +422,12 @@ class CrissCross:
             == 1
         )
 
-    def var_with_remote_sql(self, var, cluster, *statements, num=1, cache=True, ttl=DEFAULT_TTL):
+    def var_with_remote_sql(
+        self, var, cluster, *statements, num=1, cache=True, ttl=DEFAULT_TTL
+    ):
         s = "REMOTE" if cache else "REMOTENOLOCAL"
         r = self.conn.execute_command(
-            "VARWITH", var, s, cluster, num, "SQL", str(ttl) *statements
+            "VARWITH", var, s, cluster, num, "SQL", str(ttl) * statements
         )
         return r[0], [decode(s) for s in r[1:]]
 
@@ -528,9 +642,7 @@ class CrissCross:
             if i.is_file():
                 with open(i, "rb") as f:
                     loc = self.upload(f, chunk_size)
-                    files.append(
-                        (str(i), (erlang.Atom(b"embedded_tree"), loc, None))
-                    )
+                    files.append((str(i), (erlang.Atom(b"embedded_tree"), loc, None)))
         return r.put_multi(tree, files)
 
     def download(self, tree, file_obj):
@@ -604,7 +716,7 @@ class CrissCross:
             os.makedirs(directory)
         with open(real_fn, "wb") as f:
             self._do_download(f, it)
-    
+
     def remote_persist(self, cluster, loc, ttl=-1, num=1, cache=True):
         s = "REMOTE" if cache else "REMOTENOLOCAL"
         return (
@@ -613,10 +725,8 @@ class CrissCross:
         )
 
     def persist(self, loc, ttl=-1):
-        return (
-            self.conn.execute_command("PERSIST", loc, str(ttl))
-            == b"OK"
-        )
+        return self.conn.execute_command("PERSIST", loc, str(ttl)) == b"OK"
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -683,7 +793,7 @@ if __name__ == "__main__":
     subparser = subparsers.add_parser("var_get")
     subparser.add_argument("cluster")
     subparser.add_argument("key")
-    
+
     subparser = subparsers.add_parser("var_delete")
     subparser.add_argument("cluster")
     subparser.add_argument("key")
@@ -710,7 +820,6 @@ if __name__ == "__main__":
     subparser.add_argument("tree")
     subparser.add_argument("--num", type=int, default=1)
     subparser.add_argument("--cache", type=bool, default=True)
-
 
     subparser = subparsers.add_parser("remote_has_key")
     subparser.add_argument("cluster")
@@ -904,11 +1013,7 @@ if __name__ == "__main__":
             )
         )
     elif args.command == "var_with_remote_bytes_written":
-        print(
-            r.var_with_remote_bytes_written(
-                args.var, num=args.num, cache=args.cache
-            )
-        )
+        print(r.var_with_remote_bytes_written(args.var, num=args.num, cache=args.cache))
 
     elif args.command == "keypair":
         ret = r.keypair()
@@ -934,12 +1039,7 @@ if __name__ == "__main__":
             )
         )
     elif args.command == "persist":
-        print_get(
-            r.persist(
-                read_var(args.tree),
-                ttl=args.ttl
-            )
-        )
+        print_get(r.persist(read_var(args.tree), ttl=args.ttl))
 
     elif args.command == "remote_persist":
         print_get(
