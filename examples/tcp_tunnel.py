@@ -3,7 +3,7 @@ from crisscross import read_var, CrissCross
 
 token = os.getenv("TUNNEL_TOKEN")
 name = read_var("*./keys/my_var.yaml#Name")
-cluster = read_var("*defaultcluster")
+cluster = read_var("^defaultcluster")
 if os.getenv("READ"):
     writer = CrissCross(host=host, port=port, **kwargs)
 

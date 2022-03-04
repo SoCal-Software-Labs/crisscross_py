@@ -47,7 +47,7 @@ b"\xc22\xdcz'\x8c\xa0\xc9}Y;\xbe\x1bD4<G6@?\x95\xc1k\x05{\x18\xc4\xc9\xbb\xba\xa
 >>> base58.b58encode(location)
 b'E555NKZfKRoUc5F62desomHFaQRz6tinAmehCbymudhv'
 >>> client.get_multi(location, ["hello"])
-b"world"
+{b"hello": b"world"}
 ``````
 With python you can store arbitrary data... tuples, lists, dictionaries, booleans, integers, floats and atoms. Not just binary text:
 
@@ -83,16 +83,16 @@ Once you have a hash, you can share it on the network and others can clone it fr
 
 ```bash
 # On one machine
-$ crisscross announce *defaultcluster 47ZGfGj7V3M4HLUirhWWXD7sxD2sciro5YwSBnLinXXp
+$ crisscross announce ^defaultcluster 47ZGfGj7V3M4HLUirhWWXD7sxD2sciro5YwSBnLinXXp
 47ZGfGj7V3M4HLUirhWWXD7sxD2sciro5YwSBnLinXXp
 ```
 
 ```bash
 # On other machine query the tree without fully downloading it
-$ crisscross remote_get *defaultcluster 47ZGfGj7V3M4HLUirhWWXD7sxD2sciro5YwSBnLinXXp "hello2"
+$ crisscross remote_get ^defaultcluster 47ZGfGj7V3M4HLUirhWWXD7sxD2sciro5YwSBnLinXXp "hello2"
 "world2"
 # They can clone the tree to get a local copy
-$ crisscross remote_clone *defaultcluster 47ZGfGj7V3M4HLUirhWWXD7sxD2sciro5YwSBnLinXXp
+$ crisscross remote_clone ^defaultcluster 47ZGfGj7V3M4HLUirhWWXD7sxD2sciro5YwSBnLinXXp
 True
 $ crisscross get 47ZGfGj7V3M4HLUirhWWXD7sxD2sciro5YwSBnLinXXp "hello"
 "world"
@@ -130,7 +130,7 @@ Build a job server.
 
 ```python
 tree, public, priv = client.keypair()
-client.job_announce(read_var("*defaultcluster"), tree)
+client.job_announce(read_var("^defaultcluster"), tree)
 while True:
     method, arg, ref = r.job_get(tree)
     arg = arg + 1
@@ -139,7 +139,7 @@ while True:
 
 #### Client
 ```python
-resp = client.remote_job_do(read_var("*defaultcluster"), tree, "method", 42)
+resp = client.remote_job_do(read_var("^defaultcluster"), tree, "method", 42)
 print(resp)
 print(client.job_verify(tree, "method", 42, resp[0], resp[1], public))
 ```
